@@ -168,6 +168,42 @@ namespace OWS
 
     static_assert(true == detail::vrnt::is_unique<Ts...>::value, "variant should have unique parameter list");
 
+    unsigned index() const noexcept { return m_Idx; }
+    bool valueless() const noexcept { return m_Idx == s_Valueless; }
+
+    template <typename T>
+    bool holds_alternative() const noexcept
+    {
+      constexpr auto typeIdx{ detail::vrnt::IFromType<0, T, Ts...>::value };
+      return typeIdx == m_Idx;
+    }
+
+    template <typename T>
+    typename std::enable_if<detail::vrnt::is_any<T, Ts...>::value, T*>::type get_if() noexcept
+    {
+      constexpr auto typeIdx{ detail::vrnt::IFromType<0, T, Ts...>::value };
+      return typeIdx == m_Idx ? reinterpret_cast<T*>(m_Raw) : nullptr;
+    }
+
+    template <typename T>
+    typename std::enable_if<detail::vrnt::is_any<T, Ts...>::value, T const*>::type get_if() const noexcept
+    {
+      constexpr auto typeIdx{ detail::vrnt::IFromType<0, T, Ts...>::value };
+      return typeIdx == m_Idx ? reinterpret_cast<T const*>(m_Raw) : nullptr;
+    }
+
+    template <size_t I, typename T = typename std::enable_if<I < sizeof...(Ts), typename detail::vrnt::IthType<I, Ts...>::type>::type>
+    T* get_if() noexcept
+    {
+      return I == m_Idx ? reinterpret_cast<T*>(m_Raw) : nullptr;
+    }
+
+    template <size_t I, typename T = typename std::enable_if<I < sizeof...(Ts), typename detail::vrnt::IthType<I, Ts...>::type>::type>
+    T const* get_if() const noexcept
+    {
+      return I == m_Idx ? reinterpret_cast<T const*>(m_Raw) : nullptr;
+    }
+
     template <typename T>
     typename std::enable_if<detail::vrnt::is_any<T, Ts...>::value, T&>::type get() 
     {
