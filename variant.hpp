@@ -248,20 +248,27 @@ namespace OWS
       return *::new (reinterpret_cast<T*>(m_Raw)) T{ std::forward<Args>(args)... };
     }
 
+    template <size_t I, typename T = typename std::enable_if<I < sizeof...(Ts), typename detail::vrnt::IthType<I, Ts...>::type>::type, typename... Args>
+    T& emplace(Args&&... args)
+    {
+      return emplace<T>(std::forward<Args>(args)...);
+    }
+
     // valueless constructor
     Variant() = default;
     
-    explicit Variant(Variant const& other) : Variant{ /* idx initialized in emplace called in TAssign from s_CopyAssigns */ }
+    Variant(Variant const& other) : Variant{ /* idx initialized in emplace called in TAssign from s_CopyAssigns */ }
     {
       if (s_Valueless == other.m_Idx)return;
-      s_CopyAssigns[other.m_Idx](this, const_cast<Variant*>(&other));// internal guaranteed not to modify other
+      s_CopyEmplace[other.m_Idx](this, const_cast<Variant*>(&other));// internal guaranteed not to modify other
     }
 
-    explicit Variant(Variant&& other) noexcept : Variant{ /* idx initialized in emplace called in TAssign from s_MoveAssigns */ }
+    Variant(Variant&& other) noexcept : Variant{ /* idx initialized in emplace called in TAssign from s_MoveAssigns */ }
     {
       if (s_Valueless == other.m_Idx)return;
-      s_MoveAssigns[other.m_Idx](this, &other);// internal moves other contents
-      other.m_Idx = s_Valueless;
+      s_MoveEmplace[other.m_Idx](this, &other);// internal moves other contents
+      //s_Destructors[other.m_Idx](&other);// destroy other's internal variant
+      //other.m_Idx = s_Valueless;
     }
 
     // Value initializer
@@ -279,7 +286,7 @@ namespace OWS
         m_Idx = s_Valueless;
         return *this;
       }
-      s_CopyAssigns[other.m_Idx](this, const_cast<Variant*>(&other));// internal guaranteed not to modify other, this idx set as side effect
+      s_CopyEmplace[other.m_Idx](this, const_cast<Variant*>(&other));// internal guaranteed not to modify other, this idx set as side effect
       return *this;
     }
 
@@ -291,8 +298,9 @@ namespace OWS
         m_Idx = s_Valueless;
         return *this;
       }
-      s_MoveAssigns[other.m_Idx](this, &other);// internal moves other contents, this idx set as side effect
-      other.m_Idx = s_Valueless;
+      s_MoveEmplace[other.m_Idx](this, &other);// internal moves other contents, this idx set as side effect
+      //s_Destructors[other.m_Idx](&other);// destroy other's internal variant
+      //other.m_Idx = s_Valueless;
       return *this;
     }
 
@@ -313,7 +321,7 @@ namespace OWS
     }
 
     template <typename T>
-    static inline constexpr void TAssign(Variant* lhsPtr, Variant* rhsPtr)
+    static inline constexpr void TEmplace(Variant* lhsPtr, Variant* rhsPtr)
     { // internal call assumed, no const checking
       lhsPtr->emplace<typename detail::vrnt::remove_cvref<T>::type>(reinterpret_cast<T>(rhsPtr->m_Raw));
     }
@@ -323,8 +331,8 @@ namespace OWS
 
     // static fnptr storage = 3 * sizeof(void*) * sizeof...(Ts)
     static constexpr void (*const s_Destructors[])(Variant*){ TDestructor<Ts>... };
-    static constexpr void (*const s_CopyAssigns[])(Variant*, Variant*){ TAssign<Ts const&>... };
-    static constexpr void (*const s_MoveAssigns[])(Variant*, Variant*){ TAssign<Ts&&>... };
+    static constexpr void (*const s_CopyEmplace[])(Variant*, Variant*){ TEmplace<Ts const&>... };
+    static constexpr void (*const s_MoveEmplace[])(Variant*, Variant*){ TEmplace<Ts&&>... };
 
     char m_Raw[s_RawSize]{};
     unsigned m_Idx{ s_Valueless }; // current variant index
@@ -337,11 +345,11 @@ namespace OWS
 
   // linkage for pre C++17 struct static inline constexpr
   template <typename... Ts>
-  constexpr void (*const Variant<Ts...>::s_CopyAssigns[])(Variant*, Variant*);
+  constexpr void (*const Variant<Ts...>::s_CopyEmplace[])(Variant*, Variant*);
 
   // linkage for pre C++17 struct static inline constexpr
   template <typename... Ts>
-  constexpr void (*const Variant<Ts...>::s_MoveAssigns[])(Variant*, Variant*);
+  constexpr void (*const Variant<Ts...>::s_MoveEmplace[])(Variant*, Variant*);
 }
 
 #endif // !HEADER_GUARD_OWS_VARIANT_HPP
